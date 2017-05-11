@@ -6,8 +6,9 @@ import requests
 import robotparser
 import json
 import datetime
+import jieba
+from boilerpipe.extract import Extractor
 from bs4 import BeautifulSoup
-
 
 # 获取网页内容
 def getHtml(url, urlList, logs):
@@ -17,18 +18,40 @@ def getHtml(url, urlList, logs):
     'Content-Type': 'application/x-www-form-urlencoded',
     'Connection': 'Keep-Alive'
   };
-  response = requests.get(url, headers = headers);
-  if(response.status_code == 200):
-    # 访问过则设置 visit 为 true
-    urlList[url]["visit"] = True
-    # 生成日志log
-    log = generateLogs(url, "IRCourse2017S+201461551289", "Fetching", "successful")
-    logs.append(log)
-    return response.text;
-  else:
-    log = generateLogs(url, "IRCourse2017S+201461551289", "Fetching", "Error")
-    logs.append(log)
+  try:
+    response = requests.get(url, headers = headers);
+    if(response.status_code == 200):
+      #保存网页
+      response.encoding = 'utf-8'
+      # print response.text
+      saveHtml(url, response.text)
+      # 访问过则设置 visit 为 true
+      urlList[url]["visit"] = True
+      # 生成日志log
+      log = generateLogs(url, "IRCourse2017S+201461551289", "Fetching", "successful")
+      logs.append(log)
+      return response.text;
+    else:
+      log = generateLogs(url, "IRCourse2017S+201461551289", "Fetching", "Error")
+      logs.append(log)
+      return False
+  except:
     return False
+
+#分词
+def cutWord(text):
+  segList = jieba.cut(processed_plaintext, cut_all = False)
+  return "/".join(segList)
+
+# 保存网页为txt文件
+def saveHtml(url, page):
+  extractor = Extractor(extractor = 'ArticleExtractor', html = page)
+  processed_plaintext = extractor.getText()
+  # print processed_plaintext
+  fileName = "./doc/" + (url + ".txt").replace("/", "()")
+  f = open(fileName, "w")
+  f.write(processed_plaintext);
+  f.close()
 
 # 解析网页中的url
 def parseUrl(htmlPage, deep, urlList, url, logs):
@@ -36,9 +59,17 @@ def parseUrl(htmlPage, deep, urlList, url, logs):
   if(soup.find_all('a')[0]):
     for link in soup.find_all('a'):
       tempLink = link.get('href')
+      
       # 规范会一些url，例如类似这种 /new/2014/..
-      if(tempLink[0:3] != 'http'):
-        tempLink = url + '/' + tempLink
+      if(tempLink and tempLink[0:3] != 'http'):
+        if(tempLink[0:4] == "/new"):
+          tempLink = url + tempLink[4:]
+        elif(tempLink[0:4] != 'http'):
+          # print tempLink
+          tempLink = url + '/' + tempLink
+          # print tempLink
+        else:
+          continue
       # 将url加入字典中
       urlList[tempLink] = {
         "visit": False,
@@ -69,7 +100,7 @@ def parseRobots(url):
 if __name__ == '__main__':
   # 全局变量
   urlList = {
-    "http://www.scut.edu.cn/2014": {
+    "http://news.scut.edu.cn/": {
       "visit": False,
       "deep": -1
     }
@@ -78,16 +109,16 @@ if __name__ == '__main__':
   # 统计变量
   # 网页数
   pageNumber = 0;
-  for deep in range(0, 2):
+  for deep in range(0, 4):
     for url in urlList.keys():
       if(urlList.get(url)["visit"] == True):
         continue
       if(getHtml(url, urlList, logs)):
         htmlPage = getHtml(url, urlList, logs)
         pageNumber = pageNumber + 1
-        # if(pageNumber == 2123):
-        #   print pageNumber
-        #   exit()
+        if(pageNumber == 2123):
+          print pageNumber
+          exit()
           
         parseUrl(htmlPage, deep, urlList, url, logs)
       else:
